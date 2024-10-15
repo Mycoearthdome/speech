@@ -6,7 +6,7 @@ use vosk::{Model, Recognizer};
 
 fn main() {
     // Load the Vosk model
-    let model = Model::new("/home/jordan/Documents/speech/small/vosk-model-small-en-us-0.15")
+    let model = Model::new("YOUR MODEL HERE")
         .ok_or("Failed to load model")
         .unwrap();
     let recognizer = Recognizer::new(&model, 16000.0)
