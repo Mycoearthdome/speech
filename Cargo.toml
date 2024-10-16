@@ -8,8 +8,7 @@ debug = true
 
 [dependencies]
 vosk = "0.2.0"
-portaudio = "*"
-portaudio-sys2 = "0.1.0"
+cpal = "0.15.3"
 
 [build]
 rustflags = ["-C", "link-arg=-lvosk", "-C", "link-arg=-L/opt/vosk-api/src/libvosk.so"]

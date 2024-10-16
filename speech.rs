@@ -1,47 +1,64 @@
-extern crate portaudio;
+extern crate cpal;
 extern crate vosk;
 
-use portaudio::PortAudio;
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use std::sync::{Arc, Mutex};
 use vosk::{Model, Recognizer};
 
 fn main() {
+    // Get the default host
+    let host = cpal::default_host();
+
+    // Get the default input device
+    let input_device = host
+        .default_input_device()
+        .expect("No input device available");
+
     // Load the Vosk model
-    let model = Model::new("YOUR MODEL HERE")
-        .ok_or("Failed to load model")
-        .unwrap();
-    let recognizer = Recognizer::new(&model, 16000.0)
-        .ok_or("Failed to create recognizer")
-        .unwrap();
-    let recognizer = std::sync::Arc::new(std::sync::Mutex::new(recognizer));
-    let pa = PortAudio::new().unwrap();
-    let input_params =
-        portaudio::StreamParameters::<f32>::new(pa.default_input_device().unwrap(), 1, true, 0.0);
-    let output_params =
-        portaudio::StreamParameters::<f32>::new(pa.default_output_device().unwrap(), 2, true, 0.0);
-    let settings = portaudio::DuplexStreamSettings::new(input_params, output_params, 16000.0, 1024);
+    let model = Model::new("/home/jordan/Documents/speech/small/vosk-model-small-en-us-0.15")
+        .expect("Failed to load model");
 
-    let mut stream = pa
-        .open_non_blocking_stream(settings, {
-            let recognizer = recognizer.clone();
-            move |args| {
-                let mut recognizer = recognizer.lock().unwrap();
-                // Convert the in_buffer from f32 to i16
-                let in_buffer_i16: Vec<i16> = args
-                    .in_buffer
-                    .iter()
-                    .map(|x| (*x * 32767.0) as i16)
-                    .collect();
-                recognizer.accept_waveform(&in_buffer_i16);
-                println!("{:#?}", recognizer.final_result());
-                portaudio::Continue
-            }
-        })
-        .unwrap();
+    // Create the recognizer
+    let recognizer = Recognizer::new(&model, 16000.0).expect("Failed to create recognizer");
+    let recognizer = Arc::new(Mutex::new(recognizer));
 
-    // Start the stream
-    stream.start().unwrap();
+    // Create the input stream
+    let stream_config = input_device
+        .default_input_config()
+        .expect("Failed to get default input config")
+        .config();
+    let mut playing = false;
+    loop {
+        let stream = input_device
+            .build_input_stream(
+                &stream_config,
+                {
+                    let recognizer = Arc::clone(&recognizer);
+                    move |data: &[f32], _| {
+                        // Convert f32 samples to i16
+                        let samples: Vec<i16> =
+                            data.iter().map(|&x| (x * 32767.0) as i16).collect();
+                        match recognizer.lock().unwrap().accept_waveform(&samples) {
+                            vosk::DecodingState::Finalized => {
+                                println!("{:#?}", recognizer.lock().unwrap().result());
+                            }
+                            _ => {}
+                        }
+                    }
+                },
+                |err| {
+                    eprintln!("Error occurred on stream: {}", err);
+                },
+                None,
+            )
+            .expect("Failed to build input stream");
 
-    // Wait for the stream to finish
-    stream.stop().unwrap();
-    stream.close().unwrap();
+        if !playing {
+            // Start the stream
+            stream.play().expect("Failed to start stream");
+            playing = true;
+        }
+    }
+
+    // Keep the main thread alive to listen for input
 }
