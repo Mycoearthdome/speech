@@ -15,7 +15,7 @@ fn main() {
         .expect("No input device available");
 
     // Load the Vosk model
-    let model = Model::new("/home/jordan/Documents/speech/small/vosk-model-small-en-us-0.15")
+    let model = Model::new("YOUR MODEL HERE!!!")
         .expect("Failed to load model");
 
     // Create the recognizer
