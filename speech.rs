@@ -19,17 +19,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load the Vosk model
     let model =
-        Model::new("vosk-model-en-us-0.42-gigaspeech").unwrap();
+        Model::new("/home/jordan/Documents/speech/vosk-model-en-us-0.42-gigaspeech").unwrap();
 
     // Create the recognizer
     let recognizer = Recognizer::new(&model, SAMPLE_RATE).ok_or("Failed to create recognizer")?;
     let recognizer = Arc::new(Mutex::new(recognizer));
 
     // Get the input configuration for the default input device
-    let input_config = input_device
+    let mut input_config = input_device
         .default_input_config()
         .map_err(|_| "Failed to get default input config")?
         .config();
+
+    // Ensure the sample rate is set to 16000
+    input_config.sample_rate.0 = SAMPLE_RATE as u32;
+    input_config.channels = 1;
+    input_config.buffer_size = cpal::BufferSize::Fixed(1024);
 
     // Create the input stream once
     let stream = input_device.build_input_stream(
@@ -38,7 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let recognizer = Arc::clone(&recognizer);
             move |data: &[f32], _| {
                 // Convert the f32 samples to i16 samples
-                let data: Vec<i16> = data.iter().map(|x| (*x * MAX_AMPLITUDE) as i16).collect();
+                let data: Vec<i16> = data.iter().map(|&x| (x * MAX_AMPLITUDE) as i16).collect();
 
                 // Feed the samples into the recognizer
                 let mut recognizer_lock = recognizer.lock().unwrap();
@@ -47,20 +52,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let words = recognizer_lock.final_result().single().unwrap().text;
                         let trimmed_words = words.trim_matches('"').to_string();
                         if trimmed_words.len() > 0 {
-                            if !trimmed_words.contains("shh") {
-                                print!("{} ", trimmed_words);
-                            }
+                            print!("{} ", trimmed_words);
                         }
                     }
-                    vosk::DecodingState::Running => {
-                        let words = recognizer_lock.partial_result().partial;
-                        let trimmed_words = words.trim_matches('"').to_string();
-                        if trimmed_words.len() > 0 {
-                            if !trimmed_words.contains("shh") {
-                                print!("{} ", trimmed_words);
-                            }
-                        }
-                    }
+                    //vosk::DecodingState::Running => {
+                    //    let words = recognizer_lock.partial_result().partial;
+                    //    let trimmed_words = words.trim_matches('"').to_string();
+                    //    print!("{} ", trimmed_words);
+                    //}
                     _ => {}
                 }
             }
@@ -78,6 +77,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Keep the main thread alive while the stream is running
     loop {
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(std::time::Duration::from_secs(1));
     }
 }
