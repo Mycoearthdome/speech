@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load the Vosk model
     let model =
-        Model::new("/home/jordan/Documents/speech/vosk-model-en-us-0.42-gigaspeech").unwrap();
+        Model::new("vosk-model-en-us-0.42-gigaspeech").unwrap();
 
     // Create the recognizer
     let recognizer = Recognizer::new(&model, SAMPLE_RATE).ok_or("Failed to create recognizer")?;
