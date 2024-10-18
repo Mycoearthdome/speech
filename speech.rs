@@ -5,7 +5,7 @@ extern crate vosk;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat::I16;
-use libretranslate::Language;
+use libretranslate::{Language, TranslateError, Translation};
 use std::time::Duration;
 use std::{
     sync::{mpsc, Arc, Mutex},
@@ -16,37 +16,15 @@ use vosk::{Model, Recognizer};
 const SAMPLE_RATE: f32 = 44100.0;
 //const MAX_AMPLITUDE: f32 = 32767.0;
 
-async fn translate(trimmed_words: String) -> String {
-    // Create a channel with a buffer size of 1
-    let (tx, rx) = mpsc::channel();
-
-    // Spawn a new task to perform the translation
-    tokio::spawn(async move {
-        let translated = libretranslate::translate_url(
-            Language::English,
-            Language::French,
-            trimmed_words,
-            "http://192.168.0.226:5000/".to_string(),
-            None,
-        )
-        .await
-        .unwrap();
-
-        // Send the translated output through the channel
-        let _ = tx.send(translated.output);
-    });
-
-    // Wait for the translated output from the channel
-    match rx.recv() {
-        Ok(output) => output,
-        Err(_) => String::new(),
-    }
-}
-async fn fetch_translation_and_print(trimmed_results: String) {
-    if !trimmed_results.is_empty() {
-        let translated = translate(trimmed_results).await;
-        print!("{} ", translated);
-    }
+async fn translate(trimmed_words: String) -> Result<Translation, TranslateError> {
+    libretranslate::translate_url(
+        Language::English,
+        Language::French,
+        trimmed_words,
+        "http://192.168.0.226:5000/".to_string(),
+        None,
+    )
+    .await
 }
 
 #[tokio::main]
@@ -107,7 +85,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .to_string();
                 }
                 if !trimmed_results.is_empty() {
-                    print!("{} ", trimmed_results);
                     let _ = tx.send(trimmed_results);
                 }
             }
@@ -121,7 +98,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Spawn a task to receive trimmed_results and process them
     tokio::spawn(async move {
         while let Ok(trimmed_results) = rx.recv() {
-            fetch_translation_and_print(trimmed_results).await;
+            //print!("{} ", trimmed_results);
+            if !trimmed_results.is_empty() {
+                match translate(trimmed_results).await {
+                    Ok(translation) => {
+                        let translated_text = translation.output;
+                        print!("{} ", translated_text);
+                    }
+                    Err(e) => {
+                        eprintln!("Error occurred during translation: {}", e);
+                    }
+                }
+            }
         }
     });
 
