@@ -18,7 +18,7 @@ const SAMPLE_RATE: f32 = 44100.0;
 
 async fn translate(trimmed_words: String) -> Result<Translation, TranslateError> {
     libretranslate::translate_url(
-        Language::English,
+        Language::Russian,
         Language::French,
         trimmed_words,
         "http://192.168.0.226:5000/".to_string(),
@@ -38,8 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("No input device available")?;
 
     // Load the Vosk model
-    let model =
-        Model::new("/home/jordan/Documents/speech/vosk-model-en-us-0.42-gigaspeech").unwrap();
+    let model = Model::new("/home/jordan/Documents/speech/vosk-model-ru-0.42").unwrap();
 
     // Create the recognizer
     let recognizer = Recognizer::new(&model, SAMPLE_RATE).ok_or("Failed to create recognizer")?;
