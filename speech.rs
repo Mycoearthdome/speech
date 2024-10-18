@@ -5,12 +5,12 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat::I16;
 use std::{
     sync::{Arc, Mutex},
-    time::Duration,
+    //time::Duration,
 };
 use vosk::{Model, Recognizer};
 
 const SAMPLE_RATE: f32 = 44100.0;
-const MAX_AMPLITUDE: f32 = 32767.0;
+//const MAX_AMPLITUDE: f32 = 32767.0;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Get the default host
@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Ensure the sample rate is set to 16000
     input_config.sample_rate.0 = SAMPLE_RATE as u32;
     input_config.channels = 1;
-    input_config.buffer_size = cpal::BufferSize::Fixed(44100 as u32);
+    input_config.buffer_size = cpal::BufferSize::Default;
 
     // Create the input stream once
     let stream = input_device.build_input_stream_raw(
@@ -55,10 +55,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Feed the samples into the recognizer
                 let mut recognizer_lock = recognizer.lock().unwrap();
-
                 match recognizer_lock.accept_waveform(data) {
                     vosk::DecodingState::Finalized => {
-                        let words = recognizer_lock.final_result().single().unwrap();
+                        let words = recognizer_lock.result().single().unwrap();
                         let trimmed_words = words.text.trim_matches('"').to_string();
                         if !trimmed_words.is_empty() {
                             print!("{} ", trimmed_words);
@@ -81,6 +80,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Keep the main thread alive while the stream is running
     loop {
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }
