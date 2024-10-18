@@ -1,17 +1,56 @@
 extern crate cpal;
+extern crate libretranslate;
+extern crate tokio;
 extern crate vosk;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat::I16;
+use libretranslate::Language;
 use std::time::Duration;
 use std::{
-    sync::{Arc, Mutex},
+    sync::{mpsc, Arc, Mutex},
     //time::Duration,
 };
 use vosk::{Model, Recognizer};
 
 const SAMPLE_RATE: f32 = 44100.0;
 //const MAX_AMPLITUDE: f32 = 32767.0;
+
+async fn translate(trimmed_words: String) -> String {
+    // Create a channel with a buffer size of 1
+    let (tx, rx) = mpsc::channel();
+
+    // Spawn a new task to perform the translation
+    tokio::spawn(async move {
+        let translated = libretranslate::translate_url(
+            Language::Russian,
+            Language::English,
+            trimmed_words,
+            "http://192.168.0.226:5000/".to_string(),
+            None,
+        )
+        .await
+        .unwrap();
+
+        // Send the translated output through the channel
+        let _ = tx.send(translated.output);
+    });
+
+    // Wait for the translated output from the channel
+    match rx.recv() {
+        Ok(output) => output,
+        Err(_) => String::new(),
+    }
+}
+
+async fn fetch_translation_and_print(recognizer_result: Option<String>) {
+    if let Some(trimmed_words) = recognizer_result {
+        if !trimmed_words.is_empty() {
+            let translated = translate(trimmed_words).await;
+            print!("{} ", translated);
+        }
+    }
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Get the default host
@@ -23,8 +62,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("No input device available")?;
 
     // Load the Vosk model
-    let model =
-        Model::new("/home/jordan/Documents/speech/vosk-model-en-us-0.42-gigaspeech").unwrap();
+    let model = Model::new("/home/jordan/Documents/speech/vosk-model-ru-0.42").unwrap();
 
     // Create the recognizer
     let recognizer = Recognizer::new(&model, SAMPLE_RATE).ok_or("Failed to create recognizer")?;
@@ -48,24 +86,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         {
             let recognizer = Arc::clone(&recognizer);
             move |data: &cpal::Data, _: &cpal::InputCallbackInfo| {
-                // Convert the data to a slice of i16 samples
-                let data: &[i16] = match data.sample_format() {
-                    cpal::SampleFormat::I16 => data.as_slice::<i16>().unwrap(),
+                let recognizer = Arc::clone(&recognizer);
+                // Convert the data to a Vec<i16> before moving it into the async block
+                let data: Vec<i16> = match data.sample_format() {
+                    cpal::SampleFormat::I16 => data.as_slice::<i16>().unwrap().to_vec(),
                     _ => panic!("Unexpected data format"),
                 };
-
-                // Feed the samples into the recognizer
-                let mut recognizer_lock = recognizer.lock().unwrap();
-                match recognizer_lock.accept_waveform(data) {
-                    vosk::DecodingState::Finalized => {
-                        let words = recognizer_lock.result().single().unwrap();
-                        let trimmed_words = words.text.trim_matches('"').to_string();
-                        if !trimmed_words.is_empty() {
-                            print!("{} ", trimmed_words);
-                        }
+                let recognizer_result = {
+                    let mut recognizer_lock = recognizer.lock().unwrap();
+                    if recognizer_lock.accept_waveform(&data) == vosk::DecodingState::Finalized {
+                        Some(
+                            recognizer_lock
+                                .result()
+                                .single()
+                                .unwrap()
+                                .text
+                                .trim_matches('"')
+                                .to_string(),
+                        )
+                    } else {
+                        None
                     }
-                    _ => {}
-                }
+                };
+
+                fetch_translation_and_print(recognizer_result);
             }
         },
         |err| {
