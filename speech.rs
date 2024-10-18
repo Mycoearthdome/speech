@@ -3,6 +3,7 @@ extern crate vosk;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat::I16;
+use std::time::Duration;
 use std::{
     sync::{Arc, Mutex},
     //time::Duration,
@@ -70,7 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         |err| {
             eprintln!("Error occurred on stream: {}", err);
         },
-        None,
+        Some(Duration::from_secs(3)), //detects silences.
     )?;
 
     // Play the stream
