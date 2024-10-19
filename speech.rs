@@ -6,11 +6,8 @@ extern crate vosk;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat::I16;
 use libretranslate::{Language, TranslateError, Translation};
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
-use std::{
-    sync::{mpsc, Arc, Mutex},
-    //time::Duration,
-};
 use vosk::{Model, Recognizer};
 
 const SAMPLE_RATE: f32 = 44100.0;
@@ -21,7 +18,7 @@ async fn translate(trimmed_words: String) -> Result<Translation, TranslateError>
         Language::Russian,
         Language::French,
         trimmed_words,
-        "http://192.168.0.226:5000/".to_string(),
+        "http://192.168.0.226:5000/".to_string(), // URL of the libretranslate server
         None,
     )
     .await
@@ -94,7 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Duration::from_secs(3)), //detects silences.
     )?;
 
-    // Spawn a task to receive trimmed_results and process them
+    // Spawn a task to receive trimmed_results and process them through the libretranslata server.
     tokio::spawn(async move {
         while let Ok(trimmed_results) = rx.recv() {
             //print!("{} ", trimmed_results);
